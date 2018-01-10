@@ -11,7 +11,7 @@ class Docker {
 
   static _runCmd(args) {
     return new Promise( (resolve, reject) => {
-      // console.log('Running docker', args)
+      console.log('Running docker', args.join(' '));
       let proc = spawn('docker', args);
 
       let result = {
@@ -29,7 +29,7 @@ class Docker {
 
       proc.on('close', (code) => {
         if (code !== 0) {
-          reject('docker command failed. Command: `docker ' + args.join(' ') + '`, Exit: ' + code + ', Error: ' + result.stderr);
+          reject('docker command failed. Command: `docker ' + args.join(' ') + '`, Exit: ' + code + ', Error: ' + result.stderr + ', Log: ' + result.stdout);
           return;
         }
         result.code = code;
@@ -58,7 +58,7 @@ class Docker {
   }
 
   static create(image, name, options) {
-    let args = ['create'];
+    let args = ['create', '--privileged'];
     if (name) {
       args.push('--name=' + name);
     }
@@ -129,6 +129,10 @@ class Docker {
         console.log(containers)
         return Promise.resolve(containers);
       });
+  }
+
+  static exec(container, args) {
+    return this._runCmd(['exec', '--privileged', container].concat(args));
   }
 }
 
