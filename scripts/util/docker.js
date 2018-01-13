@@ -132,7 +132,7 @@ class Docker {
   }
 
   static exec(container, args) {
-    return this._runCmd(['exec', '--privileged', container].concat(args));
+    return this._runCmd(['exec', container].concat(args));
   }
 }
 

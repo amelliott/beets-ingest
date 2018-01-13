@@ -1,5 +1,6 @@
 import gulp from 'gulp';
 import path from 'path';
+import fs from 'fs';
 import { spawn } from 'child_process';
 
 import Docker from './util/docker';
@@ -105,6 +106,18 @@ class Beets {
       });
   }
 
+  static _listDir(dir) {
+    return new Promise( (resolve, reject) => {
+      path.readdir(dir, (err, files) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(files);
+      });
+    });
+  }
+
   // traverse from basedir to find all files with given extension
   // resolves with list of all matching files
   static _searchExt(basedir, extension) {
@@ -117,14 +130,29 @@ class Beets {
       });
   }
 
+  static archive(origPath) {
+    let archiveDir = '/downloads/archive/'
+    let archivePath = archiveDir + path.basename(origPath);
+    console.log('Archiving "' + origPath + '" to "' + archivePath + '"');
+    return Docker.exec(beetsContainerName, [ 'mkdir', '-p', archiveDir ])
+      .then( () => Docker.exec(beetsContainerName, [ 'mv', origPath, archivePath ]) );
+  }
+
   static unzip(basedir) {
     return this._searchExt(basedir, 'zip')
       .then( (zipFiles) => {
         let run = Promise.resolve();
         zipFiles.forEach( (f) => {
           let dest = f.replace('.zip', '');
-          run = run.then( () => Docker.exec(beetsContainerName, [ 'bash', '/config/unzip.sh', f, dest ]));
+          run = run.then( () => {
+            return Docker.exec(beetsContainerName, [ 'bash', '/config/unzip.sh', f, dest ]) })
+              .then( (result) => {
+                console.log('Unzip finisehd');
+                console.log(result.stdout);
+              })
+              .then( () => this.archive(f) );
         });
+        return run;
       })
   }
 
@@ -134,13 +162,10 @@ class Beets {
         let convert = Promise.resolve();
         wavFiles.forEach( (f) => {
           let dest = path.dirname(f);
-          convert = convert.then(
-            () => {
-              return Docker.exec(beetsContainerName, [ 'bash', '/config/wav_to_flac.sh', f, dest ])
-                .then( (result) => {
-                  console.log(result.stdout);
-                });
-            });
+          convert = convert
+            .then( () => Docker.exec(beetsContainerName, [ 'bash', '/config/wav_to_flac.sh', f, dest ]))
+            .then( (result) => { console.log(result.stdout); })
+            .then( () => this.archive(f));
         });
         return convert;
     })
