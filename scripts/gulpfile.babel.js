@@ -115,38 +115,17 @@ class Beets {
         }
         return Promise.resolve(result.stdout.split('\n').filter( line => line.length > 0));
       });
+  }
 
-    // let list = [];
-    // let traverseP = new Promise();
-    //
-    // let traverseFunc = ( dir ) => {
-    //   return new Promise( (resolve, reject) => {
-    //     fs.readdir(dir, (err, files) => {
-    //       if (err) {
-    //         reject('Failed to readdir "' + dir + '", error: ' + err.toString() );
-    //         return;
-    //       }
-    //       files.forEach( (f) => {
-    //         let fullpath = path.join(dir, f);
-    //         fs.stat(fullpath, (err, stats) => {
-    //           if (err) {
-    //             reject('Failed to stat "' + fullpath + '", error: ' + err.toString() );
-    //             return;
-    //           }
-    //           if (stats.isFile()) {
-    //             list.push(fullpath);
-    //           } else if (stats.isDirectory()) {
-    //             traverseP.then(traverseFunc(fullpath));
-    //           }
-    //         });
-    //       });
-    //     }
-    //   });
-    // }
-    //
-    // traverseP.then(traverseFunc(basedir));
-    //
-    // return Promise.resolve(list);
+  static unzip(basedir) {
+    return this._searchExt(basedir, 'zip')
+      .then( (zipFiles) => {
+        let run = Promise.resolve();
+        zipFiles.forEach( (f) => {
+          let dest = f.replace('.zip', '');
+          run = run.then( () => Docker.exec(beetsContainerName, [ 'bash', '/config/unzip.sh', f, dest ]));
+        });
+      })
   }
 
   static convertWav(basedir) {
@@ -208,5 +187,9 @@ gulp.task('beets:import', ['beets:start'], () => {
 });
 
 gulp.task('beets:wav', () => {
-  return Beets.convertWav('downloads');
+  return Beets.convertWav('/downloads');
+});
+
+gulp.task('beets:unzip', () => {
+  return Beets.unzip('/downloads');
 });
