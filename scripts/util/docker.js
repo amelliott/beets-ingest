@@ -9,10 +9,49 @@ class Docker {
     }
   */
 
-  static _runCmd(args) {
+  static _runCmdInteractive(args) {
     return new Promise( (resolve, reject) => {
       console.log('Running docker', args.join(' '));
-      let proc = spawn('docker', args);
+      let command = 'winpty';
+      args.unshift('docker');
+      let options = { stdio: 'inherit' };
+
+      let proc = spawn(command, args, options);
+
+      let result = {
+        stdout: '',
+        stderr: '',
+        code: 0
+      };
+      // proc.stdout.on('data', (data) => {
+      //   console.log(data);
+      //   // result.stdout += data;
+      // });
+      //
+      // proc.stderr.on('data', (data) => {
+      //   console.error(data);
+      //   // result.stderr += data;
+      // });
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          reject('docker command failed. Command: `' + command + ' ' + args.join(' ') + '`, Exit: ' + code + ', Error: ' + result.stderr + ', Log: ' + result.stdout);
+          return;
+        }
+        result.code = code;
+        resolve(result);
+      });
+    });
+
+  }
+
+  static _runCmd(args, tty) {
+    return new Promise( (resolve, reject) => {
+      console.log('Running docker', args.join(' '));
+      let command = 'docker';
+      let options = {};
+
+      let proc = spawn(command, args, options);
 
       let result = {
         stdout: '',
@@ -29,7 +68,7 @@ class Docker {
 
       proc.on('close', (code) => {
         if (code !== 0) {
-          reject('docker command failed. Command: `docker ' + args.join(' ') + '`, Exit: ' + code + ', Error: ' + result.stderr + ', Log: ' + result.stdout);
+          reject('docker command failed. Command: `' + command + ' ' + args.join(' ') + '`, Exit: ' + code + ', Error: ' + result.stderr + ', Log: ' + result.stdout);
           return;
         }
         result.code = code;
@@ -133,6 +172,14 @@ class Docker {
 
   static exec(container, args) {
     return this._runCmd(['exec', container].concat(args));
+  }
+
+  static execInteractive(container, args) {
+    return this._runCmdInteractive(['exec', '-it', container].concat(args));
+  }
+
+  static run(image, container, args) {
+    return this._runCmd(['run', '--rm', '-t', '--name', container, image].concat(args));
   }
 }
 

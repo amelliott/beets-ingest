@@ -35,6 +35,7 @@ class Process {
 }
 
 const beetsContainerName = 'beets';
+const beetsImageName = 'linuxserver/beets';
 class Beets {
   static created() {
     return Docker.ps(true)
@@ -51,8 +52,8 @@ class Beets {
     return Docker.stop(beetsContainerName);
   }
 
-  static import() {
-    return Docker.exec(beetsContainerName, [ 'beet', 'import', '/downloads' ])
+  static import(dir) {
+    return Docker.execInteractive(beetsContainerName, [ 'beet', 'import', dir ])
   }
 
   static create() {
@@ -126,7 +127,7 @@ class Beets {
         if (result.code !== 0) {
           return Promise.reject('find command failed');
         }
-        return Promise.resolve(result.stdout.split('\n').filter( line => line.length > 0));
+        return Promise.resolve(result.stdout.split('\n').filter( line => line.length > 0).filter( line => line.indexOf('/archive/') === -1));
       });
   }
 
@@ -170,6 +171,16 @@ class Beets {
         return convert;
     })
   }
+
+  static getDirsForImport(basedir) {
+    return Docker.exec(beetsContainerName, [ 'find', basedir, '-maxdepth', '1', '-type', 'd' ])
+      .then( (result) => {
+        return new Promise( (resolve, reject) => {
+          let dirs = result.stdout.split('\n').filter(d => d.length > 0).filter(d => !d.endsWith('archive')).filter(d => d !== basedir);
+          resolve(dirs);
+        });
+      });
+  }
 }
 
 gulp.task('beets:created', () => {
@@ -207,8 +218,26 @@ gulp.task('beets:running', () => {
     });
 })
 
-gulp.task('beets:import', ['beets:start'], () => {
-  return Beets.import('/downloads');
+gulp.task('beets:import', () => {
+  let downloadDir = '/downloads';
+  return Beets.unzip(downloadDir)
+    .then( () => Beets.convertWav(downloadDir) )
+    .then( () => Beets.getDirsForImport(downloadDir) )
+    .then( (dirs) => {
+      let p = Promise.resolve();
+      dirs.forEach( (d) => {
+          p = p
+            .then(() => {
+              console.log('Importing ' + d);
+              return Beets.import(d);
+            })
+            .then(() => {
+              console.log('Archiving ' + d);
+              return Beets.archive(d);
+            });
+      });
+      return p;
+    })
 });
 
 gulp.task('beets:wav', () => {
