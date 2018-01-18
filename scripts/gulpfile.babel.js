@@ -5,6 +5,12 @@ import { spawn } from 'child_process';
 
 import Docker from './util/docker';
 
+let config = {
+  library: '/d/beets/',
+  downloads: path.normalize(path.join(path.dirname(__dirname), 'downloads')),
+  config: path.normalize(path.join(path.dirname(__dirname), 'config'))
+}
+
 class Process {
   static spawn(command, args) {
     console.log('spawn: ', args.join(' '));
@@ -68,9 +74,9 @@ class Beets {
       }
     };
 
-    options.volumes[path.normalize(path.join(__dirname, '..', 'config'))] = '/config';
-    options.volumes[path.normalize(path.join(__dirname, '..', 'music'))] = '/music';
-    options.volumes[path.normalize(path.join(__dirname, '..', 'downloads'))] = '/downloads';
+    options.volumes[config.config] = '/config';
+    options.volumes[config.library] = '/music';
+    options.volumes[config.downloads] = '/downloads';
 
 
     return Docker.create('linuxserver/beets', beetsContainerName, options)
