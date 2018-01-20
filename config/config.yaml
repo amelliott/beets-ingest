@@ -2,7 +2,7 @@ plugins: fetchart embedart convert scrub replaygain lastgenre chroma web ftintit
 directory: /music/media
 library: /config/library/musiclibrary.db
 art_filename: albumart
-threaded: no
+threaded: yes
 original_date: no
 per_disc_numbering: no
 
@@ -21,8 +21,9 @@ import:
     write: yes
     copy: yes
     move: no
-    resume: ask
-    incremental: yes
+    resume: no
+    incremental: no
+    duplicate_action: skip
     quiet_fallback: skip
     timid: no
     log: /config/beet.log
@@ -45,6 +46,9 @@ replaygain:
 
 scrub:
     auto: yes
+
+match:
+    strong_rec_thresh: 0.10
 
 replace:
     '^\.': _

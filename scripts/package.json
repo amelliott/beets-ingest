@@ -10,9 +10,6 @@
   "license": "ISC",
   "dependencies": {
     "babel": "^6.23.0",
-    "gulp": "^3.9.1"
-  },
-  "devDependencies": {
     "babel-cli": "^6.26.0",
     "babel-core": "^6.26.0",
     "babel-eslint": "^8.0.2",
@@ -24,6 +21,9 @@
     "eslint-plugin-import": "^2.8.0",
     "gulp": "^3.9.1",
     "gulp-babel": "^7.0.0",
-    "gulp-eslint": "^4.0.0"
+    "gulp-eslint": "^4.0.0",
+    "gulp": "^3.9.1"
+  },
+  "devDependencies": {
   }
 }
