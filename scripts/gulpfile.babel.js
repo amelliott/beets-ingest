@@ -64,8 +64,8 @@ class BeetsDocker {
     return Docker.stop(beetsContainerName);
   }
 
-  static import(dir) {
-    return Docker.execInteractive(beetsContainerName, [ 'beet', 'import', dir ])
+  static exportContainer() {
+    return Docker.exportContainer(beetsContainerName, beetsContainerName + '.tar.gz');
   }
 
   static create() {
@@ -239,7 +239,7 @@ class Beets {
     return this._runCmd([ 'find', basedir, '-type', 'd', '-exec', 'sh', '-c', '(ls -p "{}"|grep />/dev/null)||echo "{}"', '\\;'])
       .then( (result) => {
         return new Promise( (resolve, reject) => {
-          let dirs = result.stdout.split('\n').filter(d => d.length > 0 && !d.startsWith(config.archive) && !d.startsWith(config.skipped) && d !== basedir);
+          let dirs = result.stdout.split('\n').filter(d => d.length > 0 && !d.startsWith('.') && !d.startsWith(config.archive) && !d.startsWith(config.skipped) && d !== basedir);
           resolve(dirs);
         });
       });
@@ -295,6 +295,10 @@ gulp.task('beetsd:logs', () => {
 gulp.task('beetsd:create', () => {
   return BeetsDocker.create();
 });
+
+gulp.task('beetsd:export', () => {
+  return BeetsDocker.exportContainer();
+})
 
 gulp.task('beetsd:start', () => {
   return BeetsDocker.start();

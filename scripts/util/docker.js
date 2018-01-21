@@ -198,6 +198,10 @@ class Docker {
   static run(image, container, args) {
     return this._runCmd(['run', '--rm', '-t', '--name', container, image].concat(args));
   }
+
+  static exportContainer(name, file) {
+    return this._runCmd(['export', '-o', file, name]);
+  }
 }
 
 export default Docker;
