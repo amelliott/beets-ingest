@@ -77,6 +77,20 @@ class Docker {
     });
   }
 
+  static logs(name) {
+    return this._runCmd(['logs', name]);
+  }
+
+  static build(path, name, dockerfile) {
+    let args = ['build', '-t', name];
+    if (dockerfile) {
+      args.push('-f');
+      args.push(dockerfile);
+    }
+    args.push(path);
+    return this._runCmd(args);
+  }
+
   static images() {
     this._runCmd(['images'])
       .then( (result) => {
@@ -97,7 +111,10 @@ class Docker {
   }
 
   static create(image, name, options) {
-    let args = ['create', '--privileged'];
+    let args = ['create'];
+    if (options.privileged) {
+      args.push('--privileged');
+    }
     if (name) {
       args.push('--name=' + name);
     }

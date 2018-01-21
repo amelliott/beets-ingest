@@ -3,12 +3,13 @@ import path from 'path';
 import fs from 'fs';
 import { spawn, exec } from 'child_process';
 
-// import Docker from './util/docker';
+import Docker from './util/docker';
 
 let config = {
-  library: '/d/beets/',
-  downloads: path.normalize(path.join(path.dirname(__dirname), 'downloads')),
-  config: path.normalize(path.join(path.dirname(__dirname), 'config')),
+  localLibrary: path.dirname(__dirname) + '/config/library',
+  localDownloads: path.dirname(__dirname) + '/downloads',
+  localConfig: path.dirname(__dirname) + '/config',
+  downloads: '/downloads',
   beetsLog: '/config/beet.log',
   archive: '/downloads/Imported',
   skipped: '/downloads/Unable to Import'
@@ -45,8 +46,8 @@ class Process {
   }
 }
 
-const beetsContainerName = 'beets';
-const beetsImageName = 'linuxserver/beets';
+const beetsContainerName = 'beets-auto-run';
+const beetsImageName = 'beets-auto';
 class BeetsDocker {
   static created() {
     return Docker.ps(true)
@@ -79,12 +80,12 @@ class BeetsDocker {
       }
     };
 
-    options.volumes[config.config] = '/config';
-    options.volumes[config.library] = '/music';
-    options.volumes[config.downloads] = '/downloads';
+    options.volumes[config.localConfig] = '/config';
+    options.volumes[config.localLibrary] = '/music';
+    options.volumes[config.localDownloads] = '/downloads';
 
 
-    return Docker.create('linuxserver/beets', beetsContainerName, options)
+    return Docker.create(beetsImageName, beetsContainerName, options)
       .then( (result) => {
           if (result.code != 0) {
             return Promise.reject("Failed to create container. Exit code: " + result.code + ". Error: " + result.stderr);
@@ -118,79 +119,15 @@ class BeetsDocker {
       })
   }
 
-  static _listDir(dir) {
-    return new Promise( (resolve, reject) => {
-      path.readdir(dir, (err, files) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(files);
-      });
-    });
+  static build() {
+    return Docker.build('.', beetsImageName);
   }
 
-  // traverse from basedir to find all files with given extension
-  // resolves with list of all matching files
-  static _searchExt(basedir, extension) {
-    return Docker.exec(beetsContainerName, [ 'find', basedir, '-name', '*.' + extension ])
+  static logs() {
+    return Docker.logs(beetsContainerName)
       .then( (result) => {
-        if (result.code !== 0) {
-          return Promise.reject('find command failed. Error: ' + result.stderr );
-        }
-        return Promise.resolve(result.stdout.split('\n').filter( line => line.length > 0).filter( line => line.indexOf('/archive/') === -1));
-      });
-  }
-
-  static archive(origPath) {
-    let archiveDir = '/downloads/archive/'
-    let archivePath = archiveDir + path.basename(origPath);
-    console.log('Archiving "' + origPath + '" to "' + archivePath + '"');
-    return Docker.exec(beetsContainerName, [ 'mkdir', '-p', archiveDir ])
-      .then( () => Docker.exec(beetsContainerName, [ 'mv', origPath, archivePath ]) );
-  }
-
-  static unzip(basedir) {
-    return this._searchExt(basedir, 'zip')
-      .then( (zipFiles) => {
-        let run = Promise.resolve();
-        zipFiles.forEach( (f) => {
-          let dest = f.replace('.zip', '');
-          run = run.then( () => {
-            return Docker.exec(beetsContainerName, [ 'bash', './unzip.sh', f, dest ]) })
-              .then( (result) => {
-                console.log('Unzip finisehd');
-                console.log(result.stdout);
-              })
-              .then( () => this.archive(f) );
-        });
-        return run;
+        console.log(result.stdout);
       })
-  }
-
-  static convertWav(basedir) {
-    return this._searchExt(basedir, 'wav')
-      .then( (wavFiles) => {
-        let convert = Promise.resolve();
-        wavFiles.forEach( (f) => {
-          let dest = path.dirname(f);
-          convert = convert
-            .then( () => Docker.exec(beetsContainerName, [ 'bash', './wav_to_flac.sh', f, dest ]))
-            .then( (result) => { console.log(result.stdout); })
-            .then( () => this.archive(f));
-        });
-        return convert;
-    })
-  }
-
-  static getDirsForImport(basedir) {
-    return Docker.exec(beetsContainerName, [ 'find', basedir, '-maxdepth', '1', '-type', 'd' ])
-      .then( (result) => {
-        return new Promise( (resolve, reject) => {
-          let dirs = result.stdout.split('\n').filter(d => d.length > 0).filter(d => !d.endsWith('Archive')).filter(d => !d.endswith('Unable to Import')).filter(d => d !== basedir);
-          resolve(dirs);
-        });
-      });
   }
 }
 
@@ -337,15 +274,23 @@ class Beets {
 }
 
 gulp.task('beetsd:created', () => {
-  return Beets.created()
+  return BeetsDocker.created()
     .then( (result) => {
       console.log(result);
     });
 });
 
-gulp.task('beetsd:clean', () => {
-  return Beets.clean();
+gulp.task('beetsd:build', () => {
+  return BeetsDocker.build();
 });
+
+gulp.task('beetsd:clean', () => {
+  return BeetsDocker.clean();
+});
+
+gulp.task('beetsd:logs', () => {
+  return BeetsDocker.logs();
+})
 
 gulp.task('beetsd:create', () => {
   return BeetsDocker.create();
@@ -400,14 +345,17 @@ function importDir(dir, auto) {
 }
 
 gulp.task('beets:downloads', () => {
-  let downloadDir = '/downloads';
-  return importDir(downloadDir, true);
+  return importDir(config.downloads, true);
+});
+
+gulp.task('beets:skipped', () => {
+  return importDir(config.skipped, false);
 });
 
 gulp.task('beets:wav', () => {
-  return Beets.convertWav('/downloads');
+  return Beets.convertWav(config.downloads);
 });
 
 gulp.task('beets:unzip', () => {
-  return Beets.unzip('/downloads');
+  return Beets.unzip(config.downloads);
 });

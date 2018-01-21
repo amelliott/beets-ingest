@@ -11,6 +11,7 @@ RUN npm install -g gulp
 # add scripts
 RUN mkdir /tasks
 WORKDIR /tasks
+COPY util/ ./util/
 COPY gulpfile.babel.js .babelrc package.json run_daemon unzip wav_to_flac ./
 RUN npm install
 
