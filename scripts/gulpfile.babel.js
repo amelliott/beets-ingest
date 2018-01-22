@@ -236,10 +236,11 @@ class Beets {
   }
 
   static getDirsForImport(basedir) {
-    return this._runCmd([ 'find', basedir, '-type', 'd', '-exec', 'sh', '-c', '(ls -p "{}"|grep />/dev/null)||echo "{}"', '\\;'])
+    return this._runCmd([ 'find', basedir, '-type', 'd', '-exec', 'sh', '-c', "(ls -p '{}'|grep />/dev/null)||echo '{}'", '\\;'])
       .then( (result) => {
         return new Promise( (resolve, reject) => {
-          let dirs = result.stdout.split('\n').filter(d => d.length > 0 && !d.startsWith('.') && !d.startsWith(config.archive) && !d.startsWith(config.skipped) && d !== basedir);
+          let dirs = result.stdout.split('\n');
+          dirs = dirs.filter(d => d.length > 0 && !path.basename(d).startsWith('.') && !d.startsWith(config.archive) && !d.startsWith(config.skipped) && d !== basedir);
           resolve(dirs);
         });
       });
@@ -292,11 +293,11 @@ gulp.task('beetsd:logs', () => {
   return BeetsDocker.logs();
 })
 
-gulp.task('beetsd:create', () => {
+gulp.task('beetsd:create', ['beetsd:clean'], () => {
   return BeetsDocker.create();
 });
 
-gulp.task('beetsd:export', () => {
+gulp.task('beetsd:export', ['beetsd:create'], () => {
   return BeetsDocker.exportContainer();
 })
 
