@@ -129,6 +129,10 @@ class BeetsDocker {
         console.log(result.stdout);
       })
   }
+
+  static save() {
+    return Docker.save(beetsImageName, beetsImageName + '.tar.gz');
+  }
 }
 
 
@@ -284,6 +288,10 @@ gulp.task('beetsd:created', () => {
 gulp.task('beetsd:build', () => {
   return BeetsDocker.build();
 });
+
+gulp.task('beetsd:save', ['beetsd:build'], () => {
+  return BeetsDocker.save();
+})
 
 gulp.task('beetsd:clean', () => {
   return BeetsDocker.clean();

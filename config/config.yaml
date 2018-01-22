@@ -1,5 +1,5 @@
 plugins: fetchart embedart convert scrub replaygain lastgenre chroma web ftintitle
-directory: /music/media
+directory: /music
 library: /config/library/musiclibrary.db
 art_filename: albumart
 threaded: yes

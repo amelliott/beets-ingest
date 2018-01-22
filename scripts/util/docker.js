@@ -187,6 +187,10 @@ class Docker {
       });
   }
 
+  static save(name, file) {
+    return this._runCmd([ 'save', '-o', file, name]);
+  }
+
   static exec(container, args) {
     return this._runCmd(['exec', container].concat(args));
   }
