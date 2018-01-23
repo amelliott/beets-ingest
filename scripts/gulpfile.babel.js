@@ -6,9 +6,9 @@ import { spawn, exec } from 'child_process';
 import Docker from './util/docker';
 
 let config = {
-  localLibrary: path.dirname(__dirname) + '/config/library',
-  localDownloads: path.dirname(__dirname) + '/downloads',
-  localConfig: path.dirname(__dirname) + '/config',
+  localLibrary: path.join(path.dirname(__dirname), 'config', 'library'),
+  localDownloads: path.join(path.dirname(__dirname), 'downloads'),
+  localConfig: path.join(path.dirname(__dirname), 'config'),
   downloads: '/downloads',
   beetsLog: '/config/beet.log',
   archive: '/downloads/Imported',
@@ -240,7 +240,7 @@ class Beets {
   }
 
   static getDirsForImport(basedir) {
-    return this._runCmd([ 'find', basedir, '-type', 'd', '-exec', 'sh', '-c', "(ls -p '{}'|grep />/dev/null)||echo '{}'", '\\;'])
+    return this._runCmd([ 'find', basedir, '-type', 'd', '-exec', 'sh', '-c', '(ls -p "$1"|grep />/dev/null)||echo "$1"', 'sh', '{}', '\\;'])
       .then( (result) => {
         return new Promise( (resolve, reject) => {
           let dirs = result.stdout.split('\n');
