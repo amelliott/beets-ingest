@@ -4,6 +4,7 @@ import fs from 'fs';
 import { spawn, exec } from 'child_process';
 
 import Docker from './util/docker';
+import FileUtils from './util/file';
 
 let config = {
   localLibrary: path.join(path.dirname(__dirname), 'config', 'library'),
@@ -75,8 +76,8 @@ class BeetsDocker {
         '8337': '8337'
       },
       env: {
-        'PGID': 20,
-        'PUID': 501
+        'PGID': 11001,
+        'PUID': 1001
       }
     };
 
@@ -138,24 +139,52 @@ class BeetsDocker {
 
 
 class Beets {
+  static deleteEmptyChildDirs(dir) {
+    return FileUtils.emptyChildDirs(dir)
+      .then( (dirs) => {
+        console.log('Found empty dirs: ' + JSON.stringify(dirs, null, 2));
+        let p = Promise.resolve();
+        dirs.forEach( (d) => {
+          p = p
+            .then( () => {
+              return new Promise( (resolve, reject) => {
+                console.log('Deleting empty dir "' + d + '"');
+                fs.rmdir(d, (err) => {
+                  if (err) {
+                    reject('rmdir error: ' + err);
+                    return;
+                  }
+                  resolve();
+                });
+              });
+            });
+        });
+        return p;
+      });
+  }
+
   static sanitizeShellArg(arg) {
+    let newArg = arg;
     if (arg.includes(' ') || arg.includes('(') || arg.includes(')') || arg.includes("'") || arg.includes('"')) {
+      newArg = "'" + arg + "'";
       // use double quote if contains single quote
       if (arg.includes("'")) {
-        return '"' + arg + '"';
+        newArg = '"' + arg + '"';
+      } else
+      // if it ended with a asterisk, move the asterisk outside the quote
+      if (arg.endsWith('*')) {
+        let quote = newArg.charAt(newArg.length-1);
+        newArg = quote + arg.substr(0, arg.length-1) + quote + '*';
       }
-      // use single quote otherwise
-      return "'" + arg + "'";
     }
-    return arg;
+    return newArg;
   }
 
   // traverse from basedir to find all files with given extension
   // resolves with list of all matching files
   static _searchExt(basedir, extension) {
-    return this._runCmd([ 'find', basedir, '-name', "'*.'" + extension, '-not', '-name', "'.*'" ])
-      .then( (result) => {
-        return Promise.resolve(result.stdout.split('\n').filter( line => line.length > 0).filter( line => !line.includes( config.archive ) ).filter( line => !line.includes( config.skipped )));
+    return FileUtils.walkDir(basedir, (f, stats) => {
+        return stats.isFile() && f.endsWith(extension);
       });
   }
 
@@ -191,20 +220,23 @@ class Beets {
       });
   }
 
+  static safeRmDir(dir) {
+    return this.rmEmptyChildDirs(dir)
+      // .then( () => this._runCmd([ 'rmdir', '--ignore-fail-on-non-empty', dir ]))
+  }
+
   static archive(origPath) {
     let archiveDir = config.archive;
-    let archivePath = path.join(archiveDir, origPath.replace('/downloads/', ''));
+    let archivePath = path.join(archiveDir, origPath.replace(config.downloads + path.sep, ''));
     console.log('Archiving "' + origPath + '" to "' + archivePath + '"');
-    return this._runCmd([ 'mkdir', '-p', path.dirname(archivePath) ])
-      .then( () => this._runCmd([ 'mv', origPath, archivePath ]) );
+    return FileUtils.moveDir(origPath, archivePath);
   }
 
   static skipped(dir) {
     let skippedDir = config.skipped;
-    let skippedPath = path.join(skippedDir, dir.replace('/downloads/', ''));
+    let skippedPath = path.join(skippedDir, dir.replace(config.downloads + path.sep, ''));
     console.log('Moving "' + dir + '" to "' + skippedPath + '"');
-    return this._runCmd([ 'mkdir', '-p', path.dirname(skippedPath)])
-      .then( () => this._runCmd([ 'mv', dir, skippedPath ]) );
+    return FileUtils.moveDir(dir, skippedPath);
   }
 
   static unzip(basedir) {
@@ -218,7 +250,7 @@ class Beets {
                 console.log('Unzip finished');
                 console.log(result.stdout);
               })
-              .then( () => this.archive(f) );
+              .then( () => this._runCmd([ 'mv', f, config.archive ]) )
         });
         return run;
       })
@@ -240,13 +272,9 @@ class Beets {
   }
 
   static getDirsForImport(basedir) {
-    return this._runCmd([ 'find', basedir, '-type', 'd', '-exec', 'sh', '-c', '(ls -p "$1"|grep />/dev/null)||echo "$1"', 'sh', '{}', '\\;'])
-      .then( (result) => {
-        return new Promise( (resolve, reject) => {
-          let dirs = result.stdout.split('\n');
-          dirs = dirs.filter(d => d.length > 0 && !path.basename(d).startsWith('.') && !d.startsWith(config.archive) && !d.startsWith(config.skipped) && d !== basedir);
-          resolve(dirs);
-        });
+    return FileUtils.leafChildDirs(basedir)
+      .then( (dirs) => {
+        return Promise.resolve(dirs.filter(d => d.length > 0 && !path.basename(d).startsWith('.') && !d.startsWith(config.archive) && !d.startsWith(config.skipped) && d !== basedir));
       });
   }
 
@@ -274,6 +302,22 @@ class Beets {
     let archivedLog = beetsLog.replace('.log', '_' + new Date() + '.log');
     console.log('Moving old log to ' + archivedLog);
     return this._runCmd([ 'mv', beetsLog, archivedLog ]);
+  }
+
+  static rmHiddenFiles(dir) {
+    return FileUtils.walkDir(dir, (f, s) => {
+        return s.isFile() && path.basename(f).startsWith('.');
+      })
+      .then( (files) => {
+        let p = Promise.resolve();
+        files.forEach( (f) => {
+          p = p
+            .then( () => {
+              console.log('Deleting hidden file: ' + JSON.stringify(f));
+              return FileUtils.deleteFile(f);
+            })
+        });
+      });
   }
 
 }
@@ -331,11 +375,14 @@ gulp.task('beetsd:running', () => {
 
 
 function importDir(dir, auto) {
-  return Beets.unzip(dir)
+  return Beets.rmHiddenFiles(dir)
+    .then( () => Beets.deleteEmptyChildDirs(dir) )
+    .then( () => Beets.unzip(dir) )
     .then( () => Beets.convertWav(dir) )
     .then( () => Beets.getDirsForImport(dir) )
     .then( (dirs) => {
       console.log('Dirs: ' + JSON.stringify(dirs))
+      // delete empty dirs
       let p = Promise.resolve();
       dirs.forEach( (d) => {
         p = p
@@ -351,6 +398,10 @@ function importDir(dir, auto) {
             }
             console.log('Archiving ' + d);
             return Beets.archive(d);
+          })
+          .then( () => {
+            // clear out any empty dirs in the main dir
+            return Beets.deleteEmptyChildDirs(dir);
           });
       });
       return p;
@@ -371,4 +422,18 @@ gulp.task('beets:wav', () => {
 
 gulp.task('beets:unzip', () => {
   return Beets.unzip(config.downloads);
+})
+
+gulp.task('beets:test', () => {
+  return Beets.archive('..\\downloads\\Hiss Golden Messenger\\Hallelujah Anyhow')
+  // return Beets.rmHiddenFiles('../downloads')
+  // return Beets.getDirsForImport('../downloads')
+  //   .then( (dirs) => {
+  //     console.log('dirs for import: ' + JSON.stringify(dirs, null, 2))
+  //   })
+
+  // return Beets.deleteEmptyChildDirs('../downloads', '.m4a')
+    // .then( (files) => { console.log(JSON.stringify(files, null, 2))})
+  // return Beets._searchExt('../downloads', '.m4a')
+  //   .then( (files) => { console.log(JSON.stringify(files, null, 2))})
 });
