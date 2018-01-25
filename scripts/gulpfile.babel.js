@@ -140,26 +140,40 @@ class BeetsDocker {
 
 class Beets {
   static deleteEmptyChildDirs(dir) {
+    let deletedDirs = [];
     return FileUtils.emptyChildDirs(dir)
       .then( (dirs) => {
-        console.log('Found empty dirs: ' + JSON.stringify(dirs, null, 2));
+        console.log('Found empty child dirs under ' + dir + ': ' + JSON.stringify(dirs, null, 2));
         let p = Promise.resolve();
         dirs.forEach( (d) => {
           p = p
             .then( () => {
               return new Promise( (resolve, reject) => {
+                if (deletedDirs.includes(d)) {
+                  // already deleted
+                  resolve();
+                  return;
+                }
                 console.log('Deleting empty dir "' + d + '"');
                 fs.rmdir(d, (err) => {
                   if (err) {
                     reject('rmdir error: ' + err);
                     return;
                   }
-                  resolve();
+                  deletedDirs.push(d);
+                  // deleting this may have made the parent now empty, so run the process on it
+                  this.deleteEmptyChildDirs(path.dirname(d))
+                    .then((ds) => {
+                      // make sure we add the deleted parent to the list so we
+                      // don't try to delete it again
+                      deletedDirs = deletedDirs.concat(ds);
+                      resolve();
+                    })
                 });
               });
             });
         });
-        return p;
+        return p.then( () => Promise.resolve(deletedDirs) );
       });
   }
 
@@ -425,15 +439,15 @@ gulp.task('beets:unzip', () => {
 })
 
 gulp.task('beets:test', () => {
-  return Beets.archive('..\\downloads\\Hiss Golden Messenger\\Hallelujah Anyhow')
+  // return Beets.archive('..\\downloads\\Hiss Golden Messenger\\Hallelujah Anyhow')
   // return Beets.rmHiddenFiles('../downloads')
   // return Beets.getDirsForImport('../downloads')
   //   .then( (dirs) => {
   //     console.log('dirs for import: ' + JSON.stringify(dirs, null, 2))
   //   })
 
-  // return Beets.deleteEmptyChildDirs('../downloads', '.m4a')
-    // .then( (files) => { console.log(JSON.stringify(files, null, 2))})
+  return Beets.deleteEmptyChildDirs('../downloads')
+    .then( (deleted) => { console.log('deleted: ' + JSON.stringify(deleted, null, 2))})
   // return Beets._searchExt('../downloads', '.m4a')
   //   .then( (files) => { console.log(JSON.stringify(files, null, 2))})
 });
