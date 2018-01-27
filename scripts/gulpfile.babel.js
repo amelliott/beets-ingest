@@ -18,32 +18,9 @@ let config = {
 
 
 class Process {
-  static spawn(command, args) {
-    console.log('spawn: ', args.join(' '));
-    let proc = spawn(command, args);
-
-    let result = {
-      stdout: '',
-      stderr: '',
-      code: 0
-    };
-
-    proc.stdout.on('data', (data) => {
-      result.stdout += data;
-    });
-
-    proc.stderr.on('data', (data) => {
-      result.stderr += data;
-    });
-
-    proc.on('close', (code) => {
-      if (code !== 0) {
-        reject('command failed. Command: `' + command + ' ' + args.join(' ') + '`, Exit: ' + code + ', Error: ' + result.stderr);
-        return;
-      }
-      result.code = code;
-      resolve(result);
-    });
+  static spawn(command, args, options) {
+    // console.log('spawn: ', args.join(' '));
+    return Promise.resolve(spawn(command, args, options));
   }
 }
 
@@ -222,15 +199,42 @@ class Beets {
   }
 
   static import(dir, auto) {
-    let args = [ 'beet', 'import' ];
     if (auto) {
-      args.push('-q');
+      let args = [ 'beet', 'import', '-q', dir ];
+      return this._runCmd(args)
+        .then( (result) => {
+          console.log('import result: ' + JSON.stringify(result));
+          return Promise.resolve(result);
+        });
     }
-    args.push(dir);
-    return this._runCmd(args)
-      .then( (result) => {
-        console.log('import result: ' + JSON.stringify(result));
-        return Promise.resolve(result);
+    return Process.spawn('beet', ['import', dir], { stdio: 'inherit' })
+      .then( (proc) => {
+        return new Promise( (resolve, reject) => {
+          let result = {
+            stdout: '',
+            stderr: '',
+            code: -1
+          };
+
+          // proc.stdout.on('data', (data) => {
+          //   result.stdout += data;
+          //   console.log(data.toString('utf8'));
+          // });
+          //
+          // proc.stderr.on('data', (data) => {
+          //   result.stderr += data;
+          //   console.error(data.toString('utf8'));
+          // });
+
+          proc.on('close', (code) => {
+            if (code !== 0) {
+              reject('command failed. Command: `' + command + ' ' + args.join(' ') + '`, Exit: ' + code + ', Error: ' + result.stderr);
+              return;
+            }
+            result.code = code;
+            resolve(result);
+          });
+        });
       });
   }
 
@@ -288,7 +292,7 @@ class Beets {
   static getDirsForImport(basedir) {
     return FileUtils.leafChildDirs(basedir)
       .then( (dirs) => {
-        return Promise.resolve(dirs.filter(d => d.length > 0 && !path.basename(d).startsWith('.') && !d.startsWith(config.archive) && !d.startsWith(config.skipped) && d !== basedir));
+        return Promise.resolve(dirs.filter(d => d.length > 0 && !path.basename(d).startsWith('.') && !d.startsWith(config.archive) && (basedir === config.skipped || !d.startsWith(config.skipped)) && d !== basedir));
       });
   }
 
@@ -405,7 +409,10 @@ function importDir(dir, auto) {
             return Beets.import(d, auto);
           })
           .then(( result ) => {
-            if (auto && ( result.stderr.includes('Skipped ') || result.stdout.includes('Skipping') )) {
+            if (!auto) {
+              return Promise.resolve();
+            }
+            if ( result.stderr.includes('Skipped ') || result.stdout.includes('Skipping') ) {
               // when finished, check log to see if it was skipped
               console.log(d + ' was skipped');
               return Beets.skipped(d);
