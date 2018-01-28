@@ -23,7 +23,7 @@ import:
     move: no
     resume: no
     incremental: no
-    duplicate_action: skip
+    duplicate_action: merge
     quiet_fallback: skip
     timid: no
     log: /config/beet.log

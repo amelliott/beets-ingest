@@ -175,7 +175,7 @@ class Beets {
   // resolves with list of all matching files
   static _searchExt(basedir, extension) {
     return FileUtils.walkDir(basedir, (f, stats) => {
-        return stats.isFile() && f.endsWith(extension);
+        return stats.isFile() && f.endsWith(extension) && !f.startsWith(config.skipped) && !f.startsWith(config.archive);
       });
   }
 
